@@ -4,11 +4,13 @@ import { X, Zap, RefreshCw, Sun, Camera as CameraIcon } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { db } from '../db';
 import { COLORS } from '../styles';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { uploadScanRow } from '../lib/supabaseScans';
 
 const { width, height } = Dimensions.get('window');
 
 export default function ScanScreen() {
-  const { setActiveScreen } = useApp();
+  const { setActiveScreen, user, isOnline } = useApp();
   const [isProcessing, setIsProcessing] = useState(false);
   const [lightingScore, setLightingScore] = useState(85);
 
@@ -23,12 +25,23 @@ export default function ScanScreen() {
         confidence: 84 + Math.random() * 5,
         summary: 'Le scan montre une lésion pigmentée symétrique avec des bordures régulières. L\'IA suggère un naevus mélanocytaire bénin. Cependant, une surveillance clinique est conseillée.',
         timestamp: new Date(),
-        patientId: '123',
+        patientId: user?.id ?? 'anonymous',
         isSynced: false,
         severity: 'low' as const,
       };
 
-      await db.scans.add(newScan);
+      const id = await db.scans.add(newScan);
+
+      // Best-effort cloud sync (only if configured + online + authed)
+      if (isOnline && user?.id && isSupabaseConfigured()) {
+        try {
+          await uploadScanRow({ userId: user.id, record: newScan });
+          await db.scans.update(id, { isSynced: true });
+        } catch {
+          // keep local-only
+        }
+      }
+
       setIsProcessing(false);
       setActiveScreen('history');
     }, 2500);
@@ -118,15 +131,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   cameraPlaceholder: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#00201a',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 77, 64, 0.4)',
   },
   guideContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -246,7 +259,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 77, 64, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',

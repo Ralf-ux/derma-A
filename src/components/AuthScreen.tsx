@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -12,20 +12,69 @@ import {
 import { Mail, Lock, ShieldCheck, Globe } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { COLORS } from '../styles';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { supabaseSignIn, supabaseSignUp } from '../lib/supabaseAuth';
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { setUser, setActiveScreen } = useApp();
 
-  const handleLogin = () => {
-    setUser({
-      id: '123',
-      name: 'Dr. Sarah Smith',
-      email: 'sarah@derma.com',
-      role: 'doctor',
-      biometricEnabled: true,
-    });
-    setActiveScreen('home');
+  const canUseSupabase = useMemo(() => isSupabaseConfigured(), []);
+
+  const handleSubmit = async () => {
+    setErrorText(null);
+    setLoading(true);
+    try {
+      if (canUseSupabase) {
+        const e = email.trim();
+        const p = password;
+        if (!e || !e.includes('@')) throw new Error('Enter a valid email.');
+        if (p.length < 6) throw new Error('Password must be at least 6 characters.');
+
+        const data = isLogin
+          ? await supabaseSignIn(e, p)
+          : await supabaseSignUp(e, p);
+
+        const supaUser = data.user;
+        if (!supaUser) {
+          throw new Error(
+            isLogin
+              ? 'Login failed. Please try again.'
+              : 'Sign up succeeded but no user returned.',
+          );
+        }
+
+        setUser({
+          id: supaUser.id,
+          name: supaUser.email?.split('@')[0] ?? 'User',
+          email: supaUser.email ?? e,
+          role: 'patient',
+          biometricEnabled: false,
+        });
+        setActiveScreen('home');
+        return;
+      }
+
+      // Fallback demo mode (no Supabase configured)
+      setUser({
+        id: '123',
+        name: 'Dr. Sarah Smith',
+        email: 'sarah@derma.com',
+        role: 'doctor',
+        biometricEnabled: true,
+      });
+      setActiveScreen('home');
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Authentication failed. Try again.';
+      setErrorText(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,6 +107,11 @@ export default function AuthScreen() {
         </View>
 
         <View style={styles.form}>
+          {!!errorText && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{errorText}</Text>
+            </View>
+          )}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>ADRESSE EMAIL</Text>
             <View style={styles.inputWrapper}>
@@ -68,6 +122,8 @@ export default function AuthScreen() {
                 style={styles.input}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
               />
             </View>
           </View>
@@ -86,13 +142,19 @@ export default function AuthScreen() {
                 placeholderTextColor="#9ca3af"
                 style={styles.input}
                 secureTextEntry
+                value={password}
+                onChangeText={setPassword}
               />
             </View>
           </View>
 
-          <TouchableOpacity style={styles.submitButton} onPress={handleLogin}>
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
             <Text style={styles.submitButtonText}>
-              {isLogin ? "Se connecter" : "Créer un compte"}
+              {loading ? '...' : isLogin ? 'Se connecter' : 'Créer un compte'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -244,6 +306,22 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  errorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  errorText: {
+    color: '#b91c1c',
+    fontSize: 12,
+    fontWeight: '700',
   },
   divider: {
     flexDirection: 'row',
