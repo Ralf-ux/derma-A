@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #004d40;
+  --color-primary-light: #00695c;
+  --color-secondary: #00342b;
+  --color-accent: #afefdd;
+  --color-background-clinical: #f8faf7;
+  --color-surface-card: #ffffff;
+  
+  --font-lexend: "Lexend", sans-serif;
+  --font-inter: "Inter", sans-serif;
+
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+body {
+  @apply bg-background-clinical font-inter text-secondary;
+}
+
+h1, h2, h3, h4 {
+  @apply font-lexend;
+}
+
+.clinical-shadow {
+  box-shadow: 0 4px 12px rgba(0, 52, 43, 0.04);
+}
+
+.camera-overlay {
+  background: radial-gradient(circle, transparent 150px, rgba(0, 52, 43, 0.85) 150px);
+}

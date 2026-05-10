@@ -1,0 +1,12 @@
+{
+  "name": "Derma",
+  "description": "Système de diagnostic dermatologique intelligent avec approche offline-first et synchronisation cloud.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "AI Diagnostic",
+    "Offline Sync",
+    "Healthcare Security"
+  ]
+}
