@@ -17,7 +17,9 @@
 }
 
 body {
-  @apply bg-background-clinical font-inter text-secondary;
+  background: #f8faf7;
+  font-family: "Inter", sans-serif;
+  color: #00342b;
 }
 
 h1, h2, h3, h4 {

@@ -6,7 +6,7 @@ export interface ScanRecord {
   location: string;
   confidence: number;
   summary: string;
-  imageData?: string; // Base64 or Blob
+  imageData?: string; // Base64 or Blob URL
   timestamp: Date;
   patientId: string;
   isSynced: boolean;
@@ -15,10 +15,16 @@ export interface ScanRecord {
 
 export interface UserProfile {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  role: 'patient' | 'doctor';
+  sex: 'male' | 'female' | 'other';
+  location: string;
+  contact: string;
+  role: 'patient' | 'admin';
   biometricEnabled: boolean;
+  /** Public URL from Supabase Storage `avatars` bucket */
+  avatarUrl?: string;
 }
 
 export class DermaDatabase extends Dexie {
@@ -27,7 +33,7 @@ export class DermaDatabase extends Dexie {
 
   constructor() {
     super('DermaDB');
-    this.version(1).stores({
+    this.version(2).stores({
       scans: '++id, patientId, timestamp, severity, isSynced',
       users: 'id, email, role'
     });
