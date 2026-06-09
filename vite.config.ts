@@ -7,8 +7,14 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
+    envPrefix: ['VITE_', 'EXPO_PUBLIC_'],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.EXPO_PUBLIC_SUPABASE_URL': JSON.stringify(env.EXPO_PUBLIC_SUPABASE_URL),
+      'process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
+      'process.env.EXPO_PUBLIC_ADMIN_EMAIL': JSON.stringify(env.EXPO_PUBLIC_ADMIN_EMAIL),
+      'process.env.EXPO_PUBLIC_ADMIN_EMAILS': JSON.stringify(env.EXPO_PUBLIC_ADMIN_EMAILS),
+      'process.env.EXPO_PUBLIC_OPENROUTER_API_KEY': JSON.stringify(env.EXPO_PUBLIC_OPENROUTER_API_KEY),
       global: 'globalThis',
     },
     resolve: {

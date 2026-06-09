@@ -1,4 +1,4 @@
-import React, { createElement, useEffect, useRef, useState } from 'react';
+import React, { createElement, useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,32 @@ import {
   ScrollView,
   Image,
   Platform,
+  Alert,
 } from 'react-native';
-import { LogOut, ShieldCheck, User, Camera } from 'lucide-react';
+import * as ImagePicker from 'expo-image-picker';
+import { LogOut, ShieldCheck, User, Camera } from 'lucide-react-native';
 import { useApp } from '../AppContext';
-import { COLORS } from '../styles';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { supabaseSignOut, updateUserProfile, uploadProfileAvatar } from '../lib/supabaseAuth';
-import type { UserProfile } from '../db';
+import { COLORS, RADIUS, SHADOW } from '../styles';
+import { isSupabaseConfigured, supabase } from '../lib/supabase/client';
+import {
+  buildAppUser,
+  fetchProfile,
+  supabaseSignOut,
+  updateUserProfile,
+  uploadProfileAvatar,
+  uploadProfileAvatarFromUri,
+  usersEqual,
+} from '../lib/supabase/auth';
+import type { UserProfile } from '../types/user';
+
+function getReadableSupabaseError(err: unknown): string {
+  const message = String((err as any)?.message ?? '').trim();
+  if (!message) return 'Could not sync with the server.';
+  if (message.toLowerCase().includes('infinite recursion detected in policy for relation "profiles"')) {
+    return 'Supabase RLS error on profiles. Re-run supabase/schema_daily_tips_and_avatar.sql in the SQL Editor, then sign in again.';
+  }
+  return message;
+}
 
 export default function ProfileSettingsScreen() {
   const { user, setUser, setActiveScreen } = useApp();
@@ -31,9 +50,41 @@ export default function ProfileSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+  }, []);
+
+  /** Reload role + profile from Supabase (e.g. after SQL: update profiles set role = 'admin'). */
+  const syncProfileFromServer = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!isSupabaseConfigured()) return;
+    setSyncing(true);
+    if (!opts?.silent) setMessage(null);
+    try {
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData.user) throw new Error('Invalid session.');
+      const profile = await fetchProfile(authData.user.id);
+      const nextUser = buildAppUser(authData.user, profile);
+      setUser((prev) => (usersEqual(prev, nextUser) ? prev : nextUser));
+      if (!opts?.silent) {
+        if (!profile) {
+          setMessage(`No profile row for this user (${authData.user.id}). Create a row in public.profiles, then sync again.`);
+        } else {
+          setMessage(`Profile synced. Role: ${nextUser.role}.`);
+        }
+      }
+    } catch (e: any) {
+      setMessage(getReadableSupabaseError(e));
+    } finally {
+      setSyncing(false);
+    }
+  }, [setUser]);
+
+  useEffect(() => {
+    void syncProfileFromServer({ silent: true });
+    // Run once when settings opens — do not depend on syncProfileFromServer (avoids setUser loops).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -55,7 +106,8 @@ export default function ProfileSettingsScreen() {
     setActiveScreen('auth');
   };
 
-  const displayName = [firstName, lastName].filter(Boolean).join(' ') || 'User';
+  const displayName =
+    [firstName, lastName].filter(Boolean).join(' ') || user?.email?.split('@')[0] || 'User';
 
   const applyUserPatch = (patch: Partial<UserProfile>) => {
     if (!user) return;
@@ -84,17 +136,64 @@ export default function ProfileSettingsScreen() {
       });
       setMessage('Profile saved.');
     } catch (e: any) {
-      setMessage(e?.message ?? 'Could not save profile.');
+      setMessage(getReadableSupabaseError(e));
     } finally {
       setSaving(false);
     }
   };
 
-  const openAvatarPicker = () => {
+  const openAvatarPicker = async () => {
+    if (!user) return;
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       fileInputRef.current?.click();
-    } else {
-      setMessage('Photo change is supported on the web build (file picker).');
+      return;
+    }
+
+    setMessage(null);
+    const library = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (library.status !== 'granted') {
+      setMessage('Photo library permission is required to change your profile picture.');
+      return;
+    }
+
+    const camera = await ImagePicker.requestCameraPermissionsAsync();
+    const pick = await new Promise<'camera' | 'library' | null>((resolve) => {
+      Alert.alert('Profile photo', 'Choose a source', [
+        { text: 'Camera', onPress: () => resolve('camera') },
+        { text: 'Photo library', onPress: () => resolve('library') },
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+      ]);
+    });
+    if (!pick) return;
+
+    const result =
+      pick === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.85,
+          });
+
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    setAvatarBusy(true);
+    try {
+      if (!isSupabaseConfigured()) throw new Error('Supabase is not configured.');
+      const url = await uploadProfileAvatarFromUri(user.id, result.assets[0].uri);
+      await updateUserProfile(user.id, { avatar_url: url });
+      applyUserPatch({ avatarUrl: url });
+      setMessage('Profile photo updated.');
+    } catch (err: unknown) {
+      setMessage(getReadableSupabaseError(err));
+    } finally {
+      setAvatarBusy(false);
     }
   };
 
@@ -111,7 +210,7 @@ export default function ProfileSettingsScreen() {
       applyUserPatch({ avatarUrl: url });
       setMessage('Profile photo updated.');
     } catch (err: any) {
-      setMessage(err?.message ?? 'Could not upload photo. Ensure the avatars bucket exists (see supabase/schema_daily_tips_and_avatar.sql).');
+      setMessage(getReadableSupabaseError(err));
     } finally {
       setAvatarBusy(false);
     }
@@ -120,10 +219,11 @@ export default function ProfileSettingsScreen() {
   if (!user) {
     return (
       <View style={styles.missingUser}>
-        <Text style={styles.missingUserText}>Session introuvable. Reconnectez-vous.</Text>
+        <Text style={styles.missingUserText}>Session not found. Please sign in again.</Text>
       </View>
     );
   }
+  const promoteToAdminSql = `update public.profiles set role = 'admin' where id = '${user.id}';`;
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
@@ -137,7 +237,10 @@ export default function ProfileSettingsScreen() {
           })
         : null}
       <Animated.View style={[styles.inner, { opacity: fadeAnim }]}>
-        <TouchableOpacity style={styles.avatarWrap} onPress={openAvatarPicker} activeOpacity={0.85} disabled={avatarBusy}>
+        <Text style={styles.screenTitle}>Account settings</Text>
+        <Text style={styles.screenSubtitle}>Manage your profile and security</Text>
+
+        <TouchableOpacity style={styles.avatarWrap} onPress={() => void openAvatarPicker()} activeOpacity={0.85} disabled={avatarBusy}>
           {user?.avatarUrl ? (
             <Image source={{ uri: user.avatarUrl }} style={styles.avatarImg} />
           ) : (
@@ -149,7 +252,7 @@ export default function ProfileSettingsScreen() {
             <Camera size={14} color="#fff" />
           </View>
         </TouchableOpacity>
-        <Text style={styles.hint}>Tap to change photo</Text>
+        <Text style={styles.hint}>Tap your photo to update it</Text>
 
         <Text style={styles.name}>{displayName}</Text>
         <Text style={styles.email}>{user?.email ?? ''}</Text>
@@ -197,6 +300,21 @@ export default function ProfileSettingsScreen() {
             <Text style={styles.rowLabel}>Role</Text>
             <Text style={styles.rowValue}>{user?.role ?? '—'}</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.syncBtn, syncing && styles.syncBtnDisabled]}
+            onPress={() => void syncProfileFromServer({ silent: false })}
+            disabled={syncing}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.syncBtnText}>{syncing ? 'Syncing…' : 'Sync from server'}</Text>
+          </TouchableOpacity>
+          {user?.role === 'patient' ? (
+            <Text style={styles.roleHint}>
+              To enable admin access, run in Supabase SQL:{' '}
+              <Text style={styles.roleHintMono}>{promoteToAdminSql}</Text>
+              {' '}then tap Sync or sign out and back in.
+            </Text>
+          ) : null}
         </View>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
@@ -246,6 +364,15 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: 'transparent' },
   scrollInner: { padding: 24, paddingBottom: 140, alignItems: 'center' },
   inner: { width: '100%', maxWidth: 400, alignItems: 'center' },
+  screenTitle: { fontSize: 22, fontWeight: '700', color: COLORS.text, alignSelf: 'flex-start', width: '100%' },
+  screenSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    alignSelf: 'flex-start',
+    width: '100%',
+    marginBottom: 20,
+    marginTop: 4,
+  },
   avatarWrap: { marginBottom: 6, position: 'relative' },
   avatarCircle: {
     width: 88,
@@ -276,12 +403,13 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: COLORS.surface,
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: RADIUS.xl,
+    padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,77,64,0.06)',
+    borderColor: COLORS.border,
     gap: 12,
+    ...SHADOW.soft,
   },
   cardTitle: { fontSize: 14, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
   row2: { flexDirection: 'row', gap: 10 },
@@ -324,6 +452,17 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
   rowLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text },
   rowValue: { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  syncBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,77,64,0.08)',
+    alignItems: 'center',
+  },
+  syncBtnDisabled: { opacity: 0.55 },
+  syncBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  roleHint: { fontSize: 11, color: '#9ca3af', lineHeight: 16, marginTop: 8 },
+  roleHintMono: { fontFamily: Platform.OS === 'web' ? 'monospace' : undefined, fontSize: 10 },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',

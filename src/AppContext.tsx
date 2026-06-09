@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import type { UserProfile } from './db';
-import { isSupabaseConfigured } from './lib/supabaseClient';
-import { supabase } from './lib/supabaseClient';
-import { buildAppUser, fetchProfile } from './lib/supabaseAuth';
+import type { UserProfile } from './types/user';
+import { isSupabaseConfigured, supabase } from './lib/supabase/client';
+import { buildAppUser, fetchProfile, usersEqual } from './lib/supabase/auth';
 
 type AppContextType = {
   user: UserProfile | null;
-  setUser: (u: UserProfile | null) => void;
+  setUser: React.Dispatch<React.SetStateAction<UserProfile | null>>;
   activeScreen: string;
   setActiveScreen: (s: string) => void;
   isOnline: boolean;
@@ -19,8 +19,24 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [activeScreen, setActiveScreen] = useState('auth');
-  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isOnline, setIsOnline] = useState(
+    Platform.OS === 'web' ? navigator.onLine : true
+  );
   const [isBooting, setIsBooting] = useState(true);
+  const bootstrappedRef = useRef(false);
+
+  // ── Network status ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleOnline  = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online',  handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online',  handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -35,15 +51,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         if (session?.user) {
           const profile = await fetchProfile(session.user.id).catch(() => null);
-          setUser(buildAppUser(session.user, profile));
-          if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-            setActiveScreen((prev) => (prev === 'auth' ? 'home' : prev));
+          const appUser = buildAppUser(session.user, profile);
+          setUser((prev) => (usersEqual(prev, appUser) ? prev : appUser));
+
+          if (
+            (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') &&
+            !bootstrappedRef.current
+          ) {
+            bootstrappedRef.current = true;
+            setActiveScreen((prev) => {
+              if (prev !== 'auth') return prev;
+              return appUser.role === 'admin' ? 'admin' : 'home';
+            });
           }
         } else {
+          bootstrappedRef.current = false;
           setUser(null);
           setActiveScreen('auth');
         }
       } catch {
+        bootstrappedRef.current = false;
         setUser(null);
         setActiveScreen('auth');
       } finally {
@@ -55,25 +82,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       void applySession('INITIAL_SESSION', session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION is handled by getSession() above — handling it twice causes update storms.
+      if (event === 'INITIAL_SESSION') return;
       void applySession(event, session);
     });
+
+    const refreshSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      await applySession('PROFILE_REFRESH', session);
+    };
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        void refreshSession();
+      }
+    };
+
+    const subscription2 = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      subscription2.remove();
     };
   }, []);
 

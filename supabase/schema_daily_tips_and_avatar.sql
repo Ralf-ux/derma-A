@@ -77,6 +77,26 @@ create table if not exists public.daily_tips_broadcast (
 insert into public.daily_tips_broadcast (id, tip1_title, tip1_body, tip2_title, tip2_body)
 values (1, '', '', '', '')
 on conflict (id) do nothing;
+-- -----------------------------------------------------------------------------
+-- 3b. Helper: admin check without recursive RLS on `profiles`
+-- -----------------------------------------------------------------------------
+create or replace function public.is_admin(_uid uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = coalesce(_uid, auth.uid())
+      and p.role = 'admin'
+  );
+$$;
+
+revoke all on function public.is_admin(uuid) from public;
+grant execute on function public.is_admin(uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 4. Row Level Security — profiles
@@ -93,12 +113,7 @@ drop policy if exists "profiles_select_admin" on public.profiles;
 create policy "profiles_select_admin"
   on public.profiles for select
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles me
-      where me.id = auth.uid() and me.role = 'admin'
-    )
-  );
+  using (public.is_admin(auth.uid()));
 
 drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
@@ -128,12 +143,7 @@ drop policy if exists "scans_select_admin" on public.scans;
 create policy "scans_select_admin"
   on public.scans for select
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using (public.is_admin(auth.uid()));
 
 drop policy if exists "scans_insert_own" on public.scans;
 create policy "scans_insert_own"
@@ -162,18 +172,8 @@ drop policy if exists "daily_tips_broadcast_all_admin" on public.daily_tips_broa
 create policy "daily_tips_broadcast_all_admin"
   on public.daily_tips_broadcast for all
   to authenticated
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using (public.is_admin(auth.uid()))
+  with check (public.is_admin(auth.uid()));
 
 -- -----------------------------------------------------------------------------
 -- 7. Storage buckets (public URLs used by the app)

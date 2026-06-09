@@ -1,83 +1,67 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Easing,
-  Image,
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, Animated, Easing, Image,
 } from 'react-native';
-import { Camera, Activity, ShieldPlus, ChevronRight, Wifi, WifiOff } from 'lucide-react';
+import {
+  Camera, Activity, ShieldPlus, ChevronRight,
+  Wifi, WifiOff, Sparkles, Heart,
+} from 'lucide-react-native';
 import { useApp } from '../AppContext';
-import { COLORS } from '../styles';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import { COLORS, RADIUS, SHADOW } from '../styles';
+import { usePatientScans } from '../hooks/usePatientScans';
 import { DashboardSkeleton } from './Skeleton';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { fetchDailyTipsBroadcast } from '../lib/supabaseDailyTips';
 
-export default function Dashboard() {
+const appIconForAll = require('../../asserts/appicon for all.png');
+
+type DashboardProps = { onTipsPublished?: () => void };
+
+export default function Dashboard(_props: DashboardProps) {
   const { user, setActiveScreen, isOnline } = useApp();
-  const scans = useLiveQuery(() => db.scans.orderBy('timestamp').reverse().limit(1).toArray());
-  const totalScans = useLiveQuery(() => db.scans.count());
+  const { scans: allScans, isLoading: scansLoading } = usePatientScans(user?.id);
+  const scans = allScans?.slice(0, 1);
+  const totalScans = allScans?.length ?? 0;
   const [dailyTips, setDailyTips] = useState<
     | undefined
-    | {
-        t1?: { title: string; body: string };
-        t2?: { title: string; body: string };
-      }
+    | { t1?: { title: string; body: string }; t2?: { title: string; body: string } }
   >(undefined);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(24)).current;
-  const heroScale = useRef(new Animated.Value(0.97)).current;
-
-  const isLoading = scans === undefined || totalScans === undefined;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(28)).current;
+  const heroScale = useRef(new Animated.Value(0.96)).current;
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!scansLoading) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         Animated.spring(heroScale, { toValue: 1, friction: 7, tension: 60, useNativeDriver: true }),
       ]).start();
     }
-  }, [isLoading]);
+  }, [scansLoading]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!isSupabaseConfigured()) {
-      setDailyTips({});
-      return;
-    }
+    if (!isSupabaseConfigured()) { setDailyTips({}); return; }
     fetchDailyTipsBroadcast()
       .then((row) => {
         if (cancelled) return;
-        if (!row) {
-          setDailyTips({});
-          return;
-        }
-        const t1 =
-          (row.tip1_title ?? '').trim() || (row.tip1_body ?? '').trim()
-            ? { title: (row.tip1_title ?? '').trim() || 'Conseil', body: (row.tip1_body ?? '').trim() }
-            : undefined;
-        const t2 =
-          (row.tip2_title ?? '').trim() || (row.tip2_body ?? '').trim()
-            ? { title: (row.tip2_title ?? '').trim() || 'Conseil', body: (row.tip2_body ?? '').trim() }
-            : undefined;
+        if (!row) { setDailyTips({}); return; }
+        const t1 = (row.tip1_title ?? '').trim() || (row.tip1_body ?? '').trim()
+          ? { title: (row.tip1_title ?? '').trim() || 'Daily tip', body: (row.tip1_body ?? '').trim() }
+          : undefined;
+        const t2 = (row.tip2_title ?? '').trim() || (row.tip2_body ?? '').trim()
+          ? { title: (row.tip2_title ?? '').trim() || 'Daily tip', body: (row.tip2_body ?? '').trim() }
+          : undefined;
         setDailyTips({ t1, t2 });
       })
-      .catch(() => {
-        if (!cancelled) setDailyTips({});
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => { if (!cancelled) setDailyTips({}); });
+    return () => { cancelled = true; };
   }, []);
 
-  if (isLoading) {
+  if (scansLoading) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <DashboardSkeleton />
@@ -85,14 +69,11 @@ export default function Dashboard() {
     );
   }
 
-  const lastScan = scans?.[0];
+  const lastScan    = scans?.[0];
   const healthIndex = lastScan
     ? lastScan.severity === 'low' ? 92 : lastScan.severity === 'medium' ? 74 : 55
     : null;
-
-  const lastScanLabel = lastScan
-    ? formatRelative(lastScan.timestamp)
-    : 'No scans yet';
+  const lastScanLabel = lastScan ? formatRelative(lastScan.timestamp) : 'No scans yet';
 
   return (
     <ScrollView
@@ -101,153 +82,185 @@ export default function Dashboard() {
       showsVerticalScrollIndicator={false}
     >
       <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        {/* Header */}
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Hello,</Text>
-            <Text style={styles.userName}>{user?.firstName ?? 'User'}</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.greeting}>Good day 👋</Text>
+            <Text style={styles.userName} numberOfLines={1}>
+              {user?.firstName?.trim() || user?.email?.split('@')[0] || 'User'}
+            </Text>
           </View>
-          <View style={styles.avatarCircle}>
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitial}>
-                {String(user?.firstName?.trim() || user?.email?.[0] || 'U').charAt(0).toUpperCase()}
-              </Text>
-            )}
-          </View>
+          <TouchableOpacity onPress={() => setActiveScreen('settings')} activeOpacity={0.8}>
+            <View style={styles.avatarRing}>
+              {user?.avatarUrl ? (
+                <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitial}>
+                  {String(user?.firstName?.trim() || user?.email?.[0] || 'U').charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Status pill */}
+        {/* ── Status pill ─────────────────────────────────────────────────── */}
         <View style={[styles.statusPill, isOnline ? styles.onlinePill : styles.offlinePill]}>
           {isOnline
-            ? <Wifi size={12} color={COLORS.primary} />
-            : <WifiOff size={12} color='#9a3412' />}
+            ? <Wifi size={11} color={COLORS.primary} />
+            : <WifiOff size={11} color="#9a3412" />}
           <Text style={[styles.statusText, isOnline ? styles.onlineText : styles.offlineText]}>
-            {isOnline ? 'Cloud synced' : 'Offline mode'}
+            {isOnline ? 'Connected · Cloud synced' : 'Offline mode · Local only'}
           </Text>
         </View>
 
-        {/* Hero CTA */}
+        {/* ── Hero CTA ────────────────────────────────────────────────────── */}
         <Animated.View style={{ transform: [{ scale: heroScale }] }}>
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={() => setActiveScreen('scan')}
             style={styles.hero}
           >
-            <View style={styles.heroIcon}>
-              <Camera size={22} color="#fff" />
-            </View>
-            <Text style={styles.heroTitle}>New AI Scan</Text>
-            <Text style={styles.heroDesc}>
-              Analyze your skin in seconds.
-            </Text>
-            <View style={styles.heroBgDecor}>
-              <Camera size={110} color="rgba(255,255,255,0.04)" />
-            </View>
-            <View style={styles.heroArrow}>
-              <ChevronRight size={18} color="rgba(255,255,255,0.5)" />
+            {/* Background decoration */}
+            <View style={styles.heroBgCircle1} />
+            <View style={styles.heroBgCircle2} />
+
+            <View style={styles.heroRow}>
+              <View style={styles.heroLeft}>
+                <View style={styles.heroIconBadge}>
+                  <Image source={appIconForAll} style={styles.heroIconImg} resizeMode="contain" />
+                </View>
+                <Text style={styles.heroEyebrow}>AI DERMATOLOGY</Text>
+                <Text style={styles.heroTitle}>Start a New{'\n'}Skin Analysis</Text>
+                <Text style={styles.heroDesc}>
+                  Upload or snap a photo for instant AI-powered diagnosis.
+                </Text>
+                <View style={styles.heroBtn}>
+                  <Text style={styles.heroBtnText}>Scan Now</Text>
+                  <ChevronRight size={14} color={COLORS.primary} />
+                </View>
+              </View>
+              <View style={styles.heroRight}>
+                <Camera size={72} color="rgba(255,255,255,0.12)" />
+              </View>
             </View>
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Stats */}
+        {/* ── Stats ───────────────────────────────────────────────────────── */}
         <View style={styles.statsRow}>
           <StatCard
-            icon={<Activity size={18} color={COLORS.primary} />}
+            icon={<Heart size={18} color={COLORS.primary} />}
             label="HEALTH INDEX"
             value={healthIndex !== null ? `${healthIndex}` : '—'}
             sub={healthIndex !== null ? '/100' : ''}
-            delay={100}
+            color={healthIndex !== null
+              ? healthIndex >= 80 ? COLORS.low : healthIndex >= 60 ? COLORS.medium : COLORS.high
+              : COLORS.primary}
+            delay={80}
           />
           <StatCard
-            icon={<ShieldPlus size={18} color={COLORS.primary} />}
+            icon={<Activity size={18} color={COLORS.primary} />}
             label="TOTAL SCANS"
-            value={`${totalScans ?? 0}`}
+            value={`${totalScans}`}
             sub="scans"
-            delay={200}
+            color={COLORS.primary}
+            delay={180}
           />
         </View>
 
-        {/* Last scan preview */}
+        {/* ── Last scan preview ───────────────────────────────────────────── */}
         {lastScan && (
           <TouchableOpacity
             style={styles.lastScanCard}
             onPress={() => setActiveScreen('history')}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
-            <View style={styles.lastScanLeft}>
-              <View style={[styles.severityDot, severityColor(lastScan.severity)]} />
-              <View>
-                <Text style={styles.lastScanLabel}>LAST SCAN</Text>
-                <Text style={styles.lastScanType} numberOfLines={1}>{lastScan.type}</Text>
-                <Text style={styles.lastScanDate}>{lastScanLabel}</Text>
+            <View style={[styles.severityStripe, { backgroundColor: severityColor(lastScan.severity) }]} />
+            <View style={styles.lastScanBody}>
+              <View style={styles.lastScanTop}>
+                <Text style={styles.lastScanEye}>LAST SCAN</Text>
+                <View style={[styles.severityPill, { backgroundColor: severityBg(lastScan.severity) }]}>
+                  <Text style={[styles.severityPillText, { color: severityColor(lastScan.severity) }]}>
+                    {lastScan.severity.toUpperCase()}
+                  </Text>
+                </View>
               </View>
+              <Text style={styles.lastScanType} numberOfLines={1}>{lastScan.type}</Text>
+              <Text style={styles.lastScanDate}>{lastScanLabel} · {lastScan.confidence.toFixed(1)}% confidence</Text>
             </View>
-            <ChevronRight size={16} color="#d1d5db" />
+            <ChevronRight size={16} color={COLORS.textMuted} />
           </TouchableOpacity>
         )}
 
-        {/* Conseils du jour — published by admin for all patients */}
-        {dailyTips !== undefined ? (
-          (dailyTips.t1 || dailyTips.t2) ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Conseils du jour</Text>
-              {dailyTips.t1 ? (
-                <TipItem
-                  icon={<ShieldPlus size={18} color={COLORS.primary} />}
-                  title={dailyTips.t1.title}
-                  desc={dailyTips.t1.body}
-                  delay={150}
-                />
-              ) : null}
-              {dailyTips.t2 ? (
-                <TipItem
-                  icon={<Activity size={18} color={COLORS.primary} />}
-                  title={dailyTips.t2.title}
-                  desc={dailyTips.t2.body}
-                  delay={250}
-                />
-              ) : null}
+        {/* ── Daily tips ──────────────────────────────────────────────────── */}
+        {dailyTips !== undefined && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Sparkles size={15} color={COLORS.primary} />
+              <Text style={styles.sectionTitle}>Daily Care Tips</Text>
             </View>
-          ) : (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Conseils du jour</Text>
-              <Text style={styles.noTipsText}>
-                Aucun conseil publié pour le moment. Votre équipe soignante pourra en ajouter depuis l&apos;espace admin.
-              </Text>
-            </View>
-          )
-        ) : null}
+            {dailyTips.t1 || dailyTips.t2 ? (
+              <>
+                {dailyTips.t1 && (
+                  <TipItem
+                    icon={<ShieldPlus size={17} color={COLORS.primary} />}
+                    title={dailyTips.t1.title}
+                    desc={dailyTips.t1.body}
+                    delay={100}
+                  />
+                )}
+                {dailyTips.t2 && (
+                  <TipItem
+                    icon={<Heart size={17} color={COLORS.primary} />}
+                    title={dailyTips.t2.title}
+                    desc={dailyTips.t2.body}
+                    delay={200}
+                  />
+                )}
+              </>
+            ) : (
+              <View style={styles.emptyTips}>
+                <Text style={styles.noTipsText}>
+                  No tips published yet. Your care team can add them from the admin dashboard.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
       </Animated.View>
     </ScrollView>
   );
 }
 
-function StatCard({ icon, label, value, sub, delay }: {
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StatCard({ icon, label, value, sub, color, delay }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub: string;
+  color: string;
   delay: number;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, {
-      toValue: 1,
-      duration: 400,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      toValue: 1, duration: 420, delay,
+      easing: Easing.out(Easing.cubic), useNativeDriver: true,
     }).start();
   }, []);
 
   return (
-    <Animated.View style={[styles.statCard, { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
-      <View style={styles.statIcon}>{icon}</View>
+    <Animated.View style={[
+      styles.statCard,
+      { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0,1], outputRange: [18,0] }) }] },
+    ]}>
+      <View style={[styles.statIconWrap, { backgroundColor: `${color}18` }]}>{icon}</View>
       <Text style={styles.statLabel}>{label}</Text>
       <View style={styles.statValueRow}>
-        <Text style={styles.statValue}>{value}</Text>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
         {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
       </View>
     </Animated.View>
@@ -263,160 +276,179 @@ function TipItem({ icon, title, desc, delay }: {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, {
-      toValue: 1,
-      duration: 400,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      toValue: 1, duration: 400, delay,
+      easing: Easing.out(Easing.cubic), useNativeDriver: true,
     }).start();
   }, []);
 
   return (
-    <Animated.View style={{ opacity: anim, transform: [{ translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }] }}>
-      <TouchableOpacity style={styles.tipItem} activeOpacity={0.75}>
-        <View style={styles.tipIcon}>{icon}</View>
+    <Animated.View style={{ opacity: anim, transform: [{ translateX: anim.interpolate({ inputRange: [0,1], outputRange: [-14,0] }) }] }}>
+      <TouchableOpacity style={styles.tipCard} activeOpacity={0.78}>
+        <View style={styles.tipIconWrap}>{icon}</View>
         <View style={styles.tipContent}>
           <Text style={styles.tipTitle}>{title}</Text>
-          <Text style={styles.tipDesc}>{desc}</Text>
+          <Text style={styles.tipDesc} numberOfLines={2}>{desc}</Text>
         </View>
-        <ChevronRight size={14} color="#d1d5db" />
+        <ChevronRight size={13} color={COLORS.textMuted} />
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-function formatRelative(date: Date): string {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatRelative(date: Date | string): string {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function severityColor(s: 'low' | 'medium' | 'high') {
-  return s === 'low'
-    ? { backgroundColor: '#10b981' }
-    : s === 'medium'
-    ? { backgroundColor: '#f59e0b' }
-    : { backgroundColor: '#ef4444' };
+  return s === 'low' ? COLORS.low : s === 'medium' ? COLORS.medium : COLORS.high;
 }
+function severityBg(s: 'low' | 'medium' | 'high') {
+  return s === 'low' ? COLORS.lowBg : s === 'medium' ? COLORS.mediumBg : COLORS.highBg;
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { padding: 24, paddingBottom: 120, maxWidth: 500, alignSelf: 'center', width: '100%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  greeting: { fontSize: 28, fontWeight: '800', color: COLORS.primary },
-  userName: { fontSize: 15, color: COLORS.primaryLight, fontWeight: '600', marginTop: -2 },
-  avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  content:   { padding: 20, paddingBottom: 130, maxWidth: 500, alignSelf: 'center', width: '100%' },
+
+  // Header
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerLeft:   { flex: 1, marginRight: 12 },
+  greeting:     { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  userName:     { fontSize: 24, fontWeight: '800', color: COLORS.text, marginTop: 2, letterSpacing: -0.5 },
+  avatarRing:   {
+    width: 50, height: 50, borderRadius: 25,
     backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: COLORS.primary,
     overflow: 'hidden',
   },
-  avatarImage: { width: 48, height: 48, borderRadius: 24 },
+  avatarImage:   { width: 50, height: 50, borderRadius: 25 },
   avatarInitial: { fontSize: 20, fontWeight: '800', color: COLORS.primary },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+
+  // Status
+  statusPill:  {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 99,
-    marginBottom: 24,
-    borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: RADIUS.pill, marginBottom: 20, borderWidth: 1,
   },
-  onlinePill: { backgroundColor: 'rgba(175,239,221,0.2)', borderColor: 'rgba(175,239,221,0.4)' },
+  onlinePill:  { backgroundColor: 'rgba(168,240,216,0.2)', borderColor: 'rgba(168,240,216,0.5)' },
   offlinePill: { backgroundColor: '#fff7ed', borderColor: '#ffedd5' },
-  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
-  onlineText: { color: COLORS.primary },
+  statusText:  { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  onlineText:  { color: COLORS.primary },
   offlineText: { color: '#9a3412' },
+
+  // Hero
   hero: {
+    borderRadius: RADIUS.xxl,
     backgroundColor: COLORS.primary,
-    borderRadius: 36,
-    padding: 28,
-    marginBottom: 24,
+    padding: 24,
+    marginBottom: 18,
     overflow: 'hidden',
+    ...SHADOW.strong,
   },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+  heroBgCircle1: {
+    position: 'absolute', width: 200, height: 200, borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    top: -60, right: -40,
   },
-  heroTitle: { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 6 },
-  heroDesc: { color: 'rgba(255,255,255,0.55)', fontSize: 13, lineHeight: 19, maxWidth: 200 },
-  heroBgDecor: { position: 'absolute', top: 30, right: -16 },
-  heroArrow: { position: 'absolute', bottom: 28, right: 28 },
-  statsRow: { flexDirection: 'row', gap: 14, marginBottom: 20 },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    padding: 20,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(0,77,64,0.06)',
+  heroBgCircle2: {
+    position: 'absolute', width: 140, height: 140, borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    bottom: -50, right: 40,
   },
-  statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(175,239,221,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  heroRow:      { flexDirection: 'row', alignItems: 'flex-end' },
+  heroLeft:     { flex: 1 },
+  heroRight:    { opacity: 0.5 },
+  heroIconBadge:{
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center', alignItems: 'center',
     marginBottom: 14,
   },
-  statLabel: { fontSize: 8, fontWeight: '800', color: '#9ca3af', letterSpacing: 1, marginBottom: 4 },
+  heroIconImg:  { width: 32, height: 32, borderRadius: 8 },
+  heroEyebrow:  { fontSize: 9, fontWeight: '800', color: 'rgba(168,240,216,0.9)', letterSpacing: 1.8, marginBottom: 6 },
+  heroTitle:    { fontSize: 24, fontWeight: '900', color: '#fff', lineHeight: 30, marginBottom: 8 },
+  heroDesc:     { fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 18, maxWidth: 200, marginBottom: 18 },
+  heroBtn:      {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#fff',
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 16, paddingVertical: 9,
+    alignSelf: 'flex-start',
+  },
+  heroBtnText:  { fontSize: 12, fontWeight: '800', color: COLORS.primary },
+
+  // Stats
+  statsRow:     { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  statCard:     {
+    flex: 1, backgroundColor: COLORS.surface,
+    padding: 16, borderRadius: RADIUS.xl,
+    borderWidth: 1, borderColor: COLORS.borderLight,
+    ...SHADOW.soft,
+  },
+  statIconWrap: {
+    width: 38, height: 38, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 12,
+  },
+  statLabel:    { fontSize: 8, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1.1, marginBottom: 4 },
   statValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  statValue: { fontSize: 22, fontWeight: '800', color: COLORS.primary },
-  statSub: { fontSize: 11, fontWeight: '600', color: COLORS.accent },
+  statValue:    { fontSize: 24, fontWeight: '900' },
+  statSub:      { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary },
+
+  // Last scan
   lastScanCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.surface,
-    padding: 18,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,77,64,0.06)',
-    marginBottom: 28,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1, borderColor: COLORS.borderLight,
+    marginBottom: 24, overflow: 'hidden',
+    ...SHADOW.soft,
   },
-  lastScanLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  severityDot: { width: 10, height: 10, borderRadius: 5 },
-  lastScanLabel: { fontSize: 8, fontWeight: '800', color: '#9ca3af', letterSpacing: 1, marginBottom: 2 },
-  lastScanType: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  lastScanDate: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: COLORS.primary, marginBottom: 4 },
-  noTipsText: { fontSize: 13, color: '#9ca3af', lineHeight: 20, paddingVertical: 4 },
-  tipItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  severityStripe: { width: 4, alignSelf: 'stretch' },
+  lastScanBody:   { flex: 1, padding: 16, gap: 3 },
+  lastScanTop:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  lastScanEye:    { fontSize: 8, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1.1 },
+  severityPill:   { paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.pill },
+  severityPillText:{ fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
+  lastScanType:   { fontSize: 15, fontWeight: '700', color: COLORS.primary },
+  lastScanDate:   { fontSize: 11, color: COLORS.textMuted },
+
+  // Tips
+  section:       { gap: 10 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  sectionTitle:  { fontSize: 16, fontWeight: '800', color: COLORS.primary },
+  emptyTips:     {
     backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
     padding: 16,
-    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(0,77,64,0.05)',
+    borderColor: COLORS.borderLight,
   },
-  tipIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(175,239,221,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+  noTipsText:    { fontSize: 13, color: COLORS.textMuted, lineHeight: 20 },
+  tipCard:       {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    padding: 14, borderRadius: RADIUS.lg,
+    borderWidth: 1, borderColor: COLORS.borderLight,
+    ...SHADOW.soft,
   },
-  tipContent: { flex: 1 },
-  tipTitle: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  tipDesc: { fontSize: 12, color: '#9ca3af', marginTop: 2, lineHeight: 17 },
+  tipIconWrap:   {
+    width: 42, height: 42, borderRadius: 13,
+    backgroundColor: COLORS.accentMuted,
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  tipContent:    { flex: 1 },
+  tipTitle:      { fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  tipDesc:       { fontSize: 11, color: COLORS.textMuted, marginTop: 2, lineHeight: 16 },
 });

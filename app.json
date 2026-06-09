@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "DermaScan",
+    "slug": "dermascan",
+    "version": "1.0.0",
+    "icon": "./asserts/appicon.png",
+    "splash": {
+      "image": "./asserts/appicon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a4d3c"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./asserts/appicon.png",
+        "backgroundColor": "#0a4d3c"
+      }
+    },
+    "ios": {
+      "icon": "./asserts/appicon.png"
+    },
+    "web": {
+      "favicon": "./asserts/appicon for all.png",
+      "name": "DermaScan"
+    },
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "",
+      "EXPO_PUBLIC_ADMIN_EMAIL": "",
+      "EXPO_PUBLIC_ADMIN_EMAILS": "",
+      "EXPO_PUBLIC_BACKEND_API_URL": ""
+    }
+  }
+}

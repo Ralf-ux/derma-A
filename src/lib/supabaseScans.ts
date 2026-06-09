@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase/client';
 import type { ScanRecord } from '../db';
 
 export async function uploadScanRow(params: {
@@ -32,7 +32,9 @@ export async function uploadScanRow(params: {
     severity_level: record.severity,
     confidence_score: record.confidence,
     recommendations: record.summary,
-    scanned_at: record.timestamp.toISOString(),
+    scanned_at: record.timestamp instanceof Date
+      ? record.timestamp.toISOString()
+      : record.timestamp,
   });
 
   if (error) throw error;
@@ -60,6 +62,9 @@ export async function fetchAdminStats() {
     supabase.from('scans').select('severity_level, user_id'),
     supabase.from('profiles').select('id, sex, location, first_name, last_name, contact'),
   ]);
+
+  if (scansRes.error) throw scansRes.error;
+  if (profilesRes.error) throw profilesRes.error;
 
   const scans = scansRes.data ?? [];
   const profiles = profilesRes.data ?? [];

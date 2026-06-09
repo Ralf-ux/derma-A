@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Animated, Easing,
 } from 'react-native';
-import { X, Zap, Sun, Camera as CameraIcon, Upload } from 'lucide-react';
+import { X, Zap, Sun, Camera as CameraIcon, Upload } from 'lucide-react-native';
 import { useApp } from '../AppContext';
 import { db } from '../db';
 import { COLORS } from '../styles';
@@ -95,7 +95,7 @@ export default function ScanScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [processingStatus, setProcessingStatus] = useState('Analyse en cours');
+  const [processingStatus, setProcessingStatus] = useState('Analyzing...');
 
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -266,7 +266,7 @@ export default function ScanScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            <TouchableOpacity style={styles.secBtn}>
+            <TouchableOpacity style={styles.secBtn} onPress={() => { setSelectedFile(null); setPreviewUrl(null); }}>
               <Zap color="#fff" size={18} />
             </TouchableOpacity>
           </View>

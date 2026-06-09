@@ -3,12 +3,12 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, Easing, Image, ScrollView,
 } from 'react-native';
-import { Mail, Lock, Eye, EyeOff, CheckCircle, User, Phone, MapPin } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, CheckCircle, User, Phone, MapPin } from 'lucide-react-native';
 import { useApp } from '../AppContext';
 import { COLORS } from '../styles';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { supabaseSignIn, supabaseSignUp, fetchProfile, buildAppUser } from '../lib/supabaseAuth';
-import logoImg from '../../asserts/favicon-removed.png';
+import logoImg from '../../asserts/appicon for all.png';
 
 const PASSWORD_RULES = [
   { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
@@ -72,7 +72,7 @@ export default function AuthScreen() {
 
     try {
       const e = email.trim().toLowerCase();
-      if (!e || !e.includes('@') || !e.includes('.')) throw new Error('Invalid email address.');
+      if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error('Invalid email address.');
 
       if (!isLogin) {
         if (!firstName.trim()) throw new Error('Please enter your first name.');
@@ -88,11 +88,10 @@ export default function AuthScreen() {
 
       if (isLogin) {
         const data = await supabaseSignIn(e, password);
-        const supaUser = data.user;
-        if (!supaUser) throw new Error('Login failed. Check your credentials.');
-        const profile = await fetchProfile(supaUser.id).catch(() => null);
-        setUser(buildAppUser(supaUser, profile));
-        setActiveScreen('home');
+        if (!data.user) throw new Error('Login failed. Check your credentials.');
+        // AppContext listens to onAuthStateChange (SIGNED_IN) and will call
+        // fetchProfile + setUser + setActiveScreen automatically.
+        // No duplicate work needed here.
       } else {
         const data = await supabaseSignUp(e, password, {
           firstName: firstName.trim(),
@@ -105,8 +104,9 @@ export default function AuthScreen() {
           setSuccessText('Account created! Check your email to confirm your registration.');
         } else if (data.user && data.session) {
           const createdProfile = await fetchProfile(data.user.id).catch(() => null);
-          setUser(buildAppUser(data.user, createdProfile));
-          setActiveScreen('home');
+          const appUser = buildAppUser(data.user, createdProfile);
+          setUser(appUser);
+          setActiveScreen(appUser.role === 'admin' ? 'admin' : 'home');
         } else {
           throw new Error('Registration failed. Please try again.');
         }
@@ -147,8 +147,9 @@ export default function AuthScreen() {
 
           {/* Logo */}
           <Animated.View style={[styles.logoWrap, { transform: [{ scale: logoScale }] }]}>
-            <Image source={{ uri: logoImg }} style={styles.logoImg} resizeMode="contain" />
-            <Text style={styles.tagline}>Precision skin health</Text>
+            <Image source={typeof logoImg === 'string' ? { uri: logoImg } : logoImg} style={styles.logoImg} resizeMode="contain" />
+            <Text style={styles.brandName}>DermaScan</Text>
+            <Text style={styles.tagline}>AI-powered skin health analysis</Text>
           </Animated.View>
 
           {/* Tabs */}
@@ -339,9 +340,10 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 8,
   },
-  logoWrap: { alignItems: 'center', marginBottom: 28 },
-  logoImg: { width: 240, height: 240, marginBottom: 10 },
-  tagline: { fontSize: 13, color: '#9ca3af' },
+  logoWrap: { alignItems: 'center', marginBottom: 24 },
+  logoImg: { width: 100, height: 100, marginBottom: 10, borderRadius: 24 },
+  brandName: { fontSize: 26, fontWeight: '900', color: COLORS.primary, letterSpacing: -0.5 },
+  tagline: { fontSize: 12, color: '#9ca3af', marginTop: 4, letterSpacing: 0.2 },
   tabs: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 99, padding: 4, marginBottom: 20 },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 99 },
   activeTab: { backgroundColor: COLORS.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },

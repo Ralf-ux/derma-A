@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, Easing, TextInput, Modal, Platform, Linking,
 } from 'react-native';
-import { Users, Activity, AlertTriangle, ShieldAlert, MapPin, X, Phone, Mail, User } from 'lucide-react';
+import { Users, Activity, AlertTriangle, ShieldAlert, MapPin, X, Phone, Mail, User } from 'lucide-react-native';
 import { COLORS } from '../styles';
 import { fetchAdminStats } from '../lib/supabaseScans';
 import { fetchDailyTipsBroadcast, saveDailyTipsBroadcast } from '../lib/supabaseDailyTips';
@@ -27,7 +27,9 @@ interface Stats {
   profiles: Profile[];
 }
 
-export default function AdminScreen() {
+type AdminScreenProps = { onTipsSaved?: () => void };
+
+export default function AdminScreen({ onTipsSaved }: AdminScreenProps) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,15 @@ export default function AdminScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
+  const playEnterAnimation = () => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(24);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  };
+
   useEffect(() => {
     Promise.all([fetchAdminStats(), fetchDailyTipsBroadcast().catch(() => null)])
       .then(([s, tips]) => {
@@ -53,12 +64,18 @@ export default function AdminScreen() {
           setTip2Title(tips.tip2_title ?? '');
           setTip2Body(tips.tip2_body ?? '');
         }
-        Animated.parallel([
-          Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(slideAnim, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        ]).start();
+        playEnterAnimation();
       })
-      .catch(e => setError(e.message ?? 'Failed to load data'))
+      .catch((e) => {
+        const msg = String(e?.message ?? e ?? 'Failed to load admin data');
+        if (msg.toLowerCase().includes('infinite recursion')) {
+          setError(
+            'RLS policy error on profiles. Re-run supabase/schema_daily_tips_and_avatar.sql in the Supabase SQL Editor.',
+          );
+        } else {
+          setError(msg);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -72,9 +89,10 @@ export default function AdminScreen() {
         tip2_title: tip2Title.trim(),
         tip2_body: tip2Body.trim(),
       });
-      setTipsMsg('Conseils enregistrés. Tous les patients les verront sur l’accueil.');
+      setTipsMsg('Tips published. All patients will see them on their home screen.');
+      onTipsSaved?.();
     } catch (e: any) {
-      setTipsMsg(e?.message ?? 'Impossible d’enregistrer. Vérifiez la table daily_tips_broadcast et les politiques RLS.');
+      setTipsMsg(e?.message ?? 'Could not save. Check daily_tips_broadcast and RLS policies in Supabase.');
     } finally {
       setTipsSaving(false);
     }
@@ -124,38 +142,37 @@ export default function AdminScreen() {
         <Text style={styles.title}>Admin Dashboard</Text>
         <Text style={styles.subtitle}>Epidemiological overview</Text>
 
-        {/* Conseils du jour — broadcast to every patient */}
         <View style={styles.tipsCard}>
-          <Text style={styles.tipsCardTitle}>Conseils du jour (tous les patients)</Text>
-          <Text style={styles.tipsHint}>Deux messages affichés sur l’accueil de chaque utilisateur connecté.</Text>
-          <Text style={styles.tipsLabel}>Conseil 1 — titre</Text>
+          <Text style={styles.tipsCardTitle}>Daily tips (all patients)</Text>
+          <Text style={styles.tipsHint}>Two messages shown on every patient&apos;s home screen. Saving triggers a notification bell.</Text>
+          <Text style={styles.tipsLabel}>Tip 1 — title</Text>
           <TextInput
-            placeholder="Ex. Protection solaire"
+            placeholder="e.g. Sun protection"
             placeholderTextColor="#9ca3af"
             style={styles.tipsInput}
             value={tip1Title}
             onChangeText={setTip1Title}
           />
-          <Text style={styles.tipsLabel}>Conseil 1 — texte</Text>
+          <Text style={styles.tipsLabel}>Tip 1 — message</Text>
           <TextInput
-            placeholder="Texte du message…"
+            placeholder="Message body…"
             placeholderTextColor="#9ca3af"
             style={[styles.tipsInput, styles.tipsMultiline]}
             value={tip1Body}
             onChangeText={setTip1Body}
             multiline
           />
-          <Text style={styles.tipsLabel}>Conseil 2 — titre</Text>
+          <Text style={styles.tipsLabel}>Tip 2 — title</Text>
           <TextInput
-            placeholder="Ex. Hydratation"
+            placeholder="e.g. Hydration"
             placeholderTextColor="#9ca3af"
             style={styles.tipsInput}
             value={tip2Title}
             onChangeText={setTip2Title}
           />
-          <Text style={styles.tipsLabel}>Conseil 2 — texte</Text>
+          <Text style={styles.tipsLabel}>Tip 2 — message</Text>
           <TextInput
-            placeholder="Texte du message…"
+            placeholder="Message body…"
             placeholderTextColor="#9ca3af"
             style={[styles.tipsInput, styles.tipsMultiline]}
             value={tip2Body}
@@ -163,7 +180,7 @@ export default function AdminScreen() {
             multiline
           />
           <TouchableOpacity style={[styles.tipsSaveBtn, tipsSaving && { opacity: 0.6 }]} onPress={handleSaveTips} disabled={tipsSaving} activeOpacity={0.85}>
-            <Text style={styles.tipsSaveText}>{tipsSaving ? 'Enregistrement…' : 'Publier les conseils'}</Text>
+            <Text style={styles.tipsSaveText}>{tipsSaving ? 'Publishing…' : 'Publish tips'}</Text>
           </TouchableOpacity>
           {!!tipsMsg && <Text style={styles.tipsMsg}>{tipsMsg}</Text>}
         </View>

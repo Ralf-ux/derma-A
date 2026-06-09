@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, View, ViewStyle } from 'react-native';
 import { COLORS } from '../styles';
-import logoImg from '../../asserts/favicon-removed.png';
+import logoImg from '../../asserts/appicon for all.png';
 
 interface SkeletonProps {
   width?: number | string;
@@ -91,7 +91,7 @@ export function FullScreenLoader({ label }: { label?: string }) {
         {/* Spinning ring behind the logo */}
         <Animated.View style={[sk.spinnerRing, { transform: [{ rotate }] }]} />
         <Animated.Image
-          source={{ uri: logoImg }}
+          source={typeof logoImg === 'string' ? { uri: logoImg } : logoImg}
           style={[sk.loaderLogo, { transform: [{ scale: pulse }] }]}
           resizeMode="contain"
         />
@@ -129,8 +129,9 @@ const sk = StyleSheet.create({
     borderTopColor: COLORS.primary,
   },
   loaderLogo: {
-    width: 144,
-    height: 144,
+    width: 120,
+    height: 120,
+    borderRadius: 28,
   },
   loaderLabel: {
     fontSize: 13,
