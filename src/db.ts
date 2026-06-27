@@ -14,6 +14,8 @@ export interface ScanRecord {
   isSynced: boolean | number;
   severity: 'low' | 'medium' | 'high';
   patientId?: string;
+  /** Serialised JSON of QuestionnaireAnswer[] — stored as text in SQLite/IndexedDB */
+  questionnaireAnswers?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +60,8 @@ if (Platform.OS === 'web') {
       location TEXT,
       confidence REAL,
       summary TEXT,
-      imageData TEXT
+      imageData TEXT,
+      questionnaireAnswers TEXT
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -69,6 +72,11 @@ if (Platform.OS === 'web') {
     );
   `);
 
+  // Migrate existing databases that were created before questionnaireAnswers was added
+  try {
+    nativeDb.execSync(`ALTER TABLE scans ADD COLUMN questionnaireAnswers TEXT;`);
+  } catch { /* column already exists — safe to ignore */ }
+
   db = {
     // === SCANS ===
     scans: {
@@ -78,8 +86,8 @@ if (Platform.OS === 'web') {
             ? record.timestamp.toISOString()
             : record.timestamp;
         const result = nativeDb.runSync(
-          `INSERT INTO scans (type, location, confidence, summary, imageData, timestamp, patientId, isSynced, severity)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          `INSERT INTO scans (type, location, confidence, summary, imageData, timestamp, patientId, isSynced, severity, questionnaireAnswers)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             record.type,
             record.location,
@@ -90,6 +98,7 @@ if (Platform.OS === 'web') {
             record.patientId ?? null,
             record.isSynced ? 1 : 0,
             record.severity,
+            record.questionnaireAnswers ?? null,
           ],
         );
         return result.lastInsertRowId;
@@ -110,7 +119,7 @@ if (Platform.OS === 'web') {
         if (changes.severity  !== undefined) { setClauses.push('severity = ?');   values.push(changes.severity); }
         if (changes.patientId !== undefined) { setClauses.push('patientId = ?');  values.push(changes.patientId); }
         if (changes.isSynced  !== undefined) { setClauses.push('isSynced = ?');   values.push(changes.isSynced ? 1 : 0); }
-
+        if (changes.questionnaireAnswers !== undefined) { setClauses.push('questionnaireAnswers = ?'); values.push(changes.questionnaireAnswers); }
         if (setClauses.length === 0) return;
         values.push(numericId);
         nativeDb.runSync(

@@ -9,6 +9,7 @@ import { COLORS } from '../styles';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { uploadScanRow } from '../lib/supabaseScans';
 import { GoogleGenAI } from '@google/genai';
+import PreScanQuestionnaire, { type PreScanAnswer } from './PreScanQuestionnaire';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? (import.meta.env.GEMINI_API_KEY as string | undefined);
 
@@ -18,7 +19,7 @@ function deriveSeverity(confidence: number): 'low' | 'medium' | 'high' {
   return 'high';
 }
 
-async function analyzeImageWithGemini(file: File): Promise<{
+async function analyzeImageWithGemini(file: File, preScanContext = ''): Promise<{
   type: string;
   confidence: number;
   severity: 'low' | 'medium' | 'high';
@@ -39,7 +40,7 @@ async function analyzeImageWithGemini(file: File): Promise<{
   "severity": "<low|medium|high>",
   "summary": "<2-3 sentence clinical summary in English describing the finding and recommendation>"
 }
-If the image is not a skin image, use type "Non-cutaneous image", confidence 0, severity "low", and explain in summary.`;
+If the image is not a skin image, use type "Non-cutaneous image", confidence 0, severity "low", and explain in summary.${preScanContext}`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.0-flash',
@@ -97,6 +98,10 @@ export default function ScanScreen() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState('Analyzing...');
 
+  // ── Pre-scan questionnaire ─────────────────────────────────────────────────
+  const [showPreQuestionnaire, setShowPreQuestionnaire] = useState(false);
+  const [preScanAnswers, setPreScanAnswers] = useState<PreScanAnswer[]>([]);
+
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -135,7 +140,31 @@ export default function ScanScreen() {
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  const handleCapture = async () => {
+  /**
+   * Step 1 — user taps the capture button.
+   * Open the pre-scan questionnaire first; the actual AI call happens only
+   * after the questionnaire is completed or skipped.
+   */
+  const handleCapture = () => {
+    if (!selectedFile) return;
+    setPreScanAnswers([]);
+    setShowPreQuestionnaire(true);
+  };
+
+  /**
+   * Step 2 — pre-scan questionnaire completed or skipped.
+   * Now run the AI analysis.
+   */
+  const handlePreScanDone = async (answers: PreScanAnswer[]) => {
+    setShowPreQuestionnaire(false);
+    setPreScanAnswers(answers);
+    await runAnalysis(answers);
+  };
+
+  /**
+   * Core AI analysis — called after pre-scan answers are collected.
+   */
+  const runAnalysis = async (preScanData: PreScanAnswer[]) => {
     if (!selectedFile) return;
     setIsProcessing(true);
     setProcessingStatus('Analyzing...');
@@ -143,9 +172,16 @@ export default function ScanScreen() {
 
     let result: { type: string; confidence: number; severity: 'low' | 'medium' | 'high'; summary: string };
 
+    // Build a pre-scan context snippet to enrich the Gemini prompt
+    const preScanContext = preScanData.length > 0
+      ? '\n\nPatient intake context:\n' + preScanData
+          .map(a => `- ${a.questionText}: ${Array.isArray(a.answer) ? a.answer.join(', ') : a.answer}`)
+          .join('\n')
+      : '';
+
     try {
       setProcessingStatus('AI model processing...');
-      result = await analyzeImageWithGemini(selectedFile);
+      result = await analyzeImageWithGemini(selectedFile, preScanContext);
     } catch {
       // Fallback to mock if Gemini fails
       setProcessingStatus('Local analysis...');
@@ -174,11 +210,18 @@ export default function ScanScreen() {
       });
     } catch { /* skip */ }
 
+    // Attach pre-scan answers to the summary
+    const preScanSummary = preScanData.length > 0
+      ? '\n\nPre-scan intake: ' + preScanData
+          .map(a => `${a.questionText.replace(/\?$/, '')}: ${Array.isArray(a.answer) ? a.answer.join(', ') : a.answer}`)
+          .join(' | ')
+      : '';
+
     const newScan = {
       type: result.type,
       location: user?.location || 'Analyzed area',
       confidence: result.confidence,
-      summary: result.summary,
+      summary: result.summary + preScanSummary,
       imageData,
       timestamp: new Date(),
       patientId: user?.id ?? 'anonymous',
@@ -282,6 +325,13 @@ export default function ScanScreen() {
           </View>
         </Animated.View>
       )}
+
+      {/* ── Pre-scan questionnaire (shown before AI runs) ── */}
+      <PreScanQuestionnaire
+        visible={showPreQuestionnaire}
+        onComplete={handlePreScanDone}
+        onSkip={() => handlePreScanDone([])}
+      />
     </Animated.View>
   );
 }

@@ -8,7 +8,7 @@ import { useApp } from '../AppContext';
 import { COLORS } from '../styles';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { supabaseSignIn, supabaseSignUp, fetchProfile, buildAppUser } from '../lib/supabaseAuth';
-import logoImg from '../../asserts/appicon for all.png';
+import logoImg from '../../asserts/appicon-for-all.png';
 
 const PASSWORD_RULES = [
   { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },

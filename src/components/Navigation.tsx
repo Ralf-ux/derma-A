@@ -8,7 +8,7 @@ import { useApp } from '../AppContext';
 import { COLORS, RADIUS, SHADOW } from '../styles';
 
 // Use the branded icon for the Scan tab
-const appIconForAll = require('../../asserts/appicon for all.png');
+const appIconForAll = require('../../asserts/appicon-for-all.png');
 
 export default function Navigation() {
   const { activeScreen, setActiveScreen, user } = useApp();

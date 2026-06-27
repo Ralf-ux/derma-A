@@ -27,7 +27,7 @@ Your role is to:
 Keep responses clear, concise, and friendly. Use bullet points or short paragraphs. Avoid overly technical jargon unless explaining it.
 If a question is outside dermatology, gently redirect to skin-related topics.`;
 
-const appIconForAll = require('../../asserts/appicon for all.png');
+const appIconForAll = require('../../asserts/appicon-for-all.png');
 
 type Message = { role: 'bot' | 'user'; text: string };
 

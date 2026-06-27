@@ -14,7 +14,7 @@ import { DashboardSkeleton } from './Skeleton';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { fetchDailyTipsBroadcast } from '../lib/supabaseDailyTips';
 
-const appIconForAll = require('../../asserts/appicon for all.png');
+const appIconForAll = require('../../asserts/appicon-for-all.png');
 
 type DashboardProps = { onTipsPublished?: () => void };
 

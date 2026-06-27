@@ -27,8 +27,8 @@ import TipsNotificationModal from './components/TipsNotificationModal';
 import { Bell } from 'lucide-react-native';
 import { COLORS, LAYOUT } from './styles';
 import { useDailyTipsBell } from './hooks/useDailyTipsBell';
-import logoImg from '../asserts/appicon for all.png';
-import mirrorBg from '../asserts/images/miror image.png';
+import logoImg from '../asserts/appicon-for-all.png';
+import mirrorBg from '../asserts/images/mirror-image.png';
 import DermaBotWidget from './components/DermaBotWidget';
 
 

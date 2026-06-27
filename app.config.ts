@@ -5,12 +5,15 @@ export default {
   slug: 'dermascan',
   version: '1.0.0',
   icon: './asserts/appicon.png',
+  // Point Expo CLI to the CJS metro config (required when package.json has "type":"module")
+  metroConfig: './metro.config.cjs',
   splash: {
     image: './asserts/appicon.png',
     resizeMode: 'contain',
     backgroundColor: '#0a4d3c',
   },
   android: {
+    package: 'com.ralph2x.dermascan', // ADD THIS LINE 👇
     adaptiveIcon: {
       foregroundImage: './asserts/appicon.png',
       backgroundColor: '#0a4d3c',
@@ -34,7 +37,7 @@ export default {
     ],
   ],
   web: {
-    favicon: './asserts/appicon for all.png',
+    favicon: './asserts/appicon-for-all.png',
     name: 'DermaScan',
   },
   extra: {
@@ -44,5 +47,8 @@ export default {
     EXPO_PUBLIC_ADMIN_EMAILS: process.env.EXPO_PUBLIC_ADMIN_EMAILS ?? '',
     EXPO_PUBLIC_BACKEND_API_URL: process.env.EXPO_PUBLIC_BACKEND_API_URL ?? '',
     EXPO_PUBLIC_OPENROUTER_API_KEY: process.env.EXPO_PUBLIC_OPENROUTER_API_KEY ?? '',
+    eas: {
+      projectId: "9863f30b-9a66-412b-8be9-feaa11dc189b"
+    }
   },
 } satisfies ExpoConfig;

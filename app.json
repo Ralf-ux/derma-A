@@ -19,7 +19,7 @@
       "icon": "./asserts/appicon.png"
     },
     "web": {
-      "favicon": "./asserts/appicon for all.png",
+      "favicon": "./asserts/appicon-for-all.png",
       "name": "DermaScan"
     },
     "extra": {

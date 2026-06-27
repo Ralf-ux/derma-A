@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, View, ViewStyle } from 'react-native';
 import { COLORS } from '../styles';
-import logoImg from '../../asserts/appicon for all.png';
+import logoImg from '../../asserts/appicon-for-all.png';
 
 interface SkeletonProps {
   width?: number | string;

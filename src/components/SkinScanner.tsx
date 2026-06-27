@@ -17,6 +17,7 @@ import { useApp } from '../AppContext';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { uploadScanRow } from '../lib/supabaseScans';
 import { getEnv } from '../lib/getEnv';
+import PreScanQuestionnaire, { type PreScanAnswer } from './PreScanQuestionnaire';
 
 const BACKEND_API_URL = getEnv('EXPO_PUBLIC_BACKEND_API_URL') || getEnv('VITE_BACKEND_API_URL') || "http://localhost:8000/scan";
 
@@ -118,6 +119,10 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
     severity: 'low' | 'medium' | 'high';
   } | null>(null);
 
+  // ── Pre-scan questionnaire ─────────────────────────────────────────────────
+  const [showPreQuestionnaire, setShowPreQuestionnaire] = useState(false);
+  const [preScanAnswers, setPreScanAnswers] = useState<PreScanAnswer[]>([]);
+
   const takePhotoWithCamera = async () => {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     
@@ -160,13 +165,42 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
     }
   };
 
-  const uploadAndScanImage = async () => {
+  /**
+   * Step 1 — user taps "Run Diagnostic Scan".
+   * Open the pre-scan questionnaire; analysis runs only after it completes.
+   */
+  const handleScanPress = () => {
     if (!imageUri) {
       alert("Please select or snap a photo of the skin lesion first.");
       return;
     }
+    setPreScanAnswers([]);
+    setShowPreQuestionnaire(true);
+  };
+
+  /**
+   * Step 2 — pre-scan questionnaire completed or skipped.
+   */
+  const handlePreScanDone = (answers: PreScanAnswer[]) => {
+    setShowPreQuestionnaire(false);
+    setPreScanAnswers(answers);
+    void uploadAndScanImage(answers);
+  };
+
+  /**
+   * Step 3 — run the actual backend scan with the collected pre-scan context.
+   */
+  const uploadAndScanImage = async (preScanData: PreScanAnswer[]) => {
+    if (!imageUri) return;
 
     setLoading(true);
+
+    // Build a readable pre-scan note to attach to the summary
+    const preScanNote = preScanData.length > 0
+      ? '\n\nPre-scan intake: ' + preScanData
+          .map(a => `${a.questionText.replace(/\?$/, '')}: ${Array.isArray(a.answer) ? a.answer.join(', ') : a.answer}`)
+          .join(' | ')
+      : '';
 
     try {
       const formData = new FormData();
@@ -224,7 +258,7 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
           console.warn("Could not convert image to base64:", imgError);
         }
 
-        const summary = `Local neural network analysis of ${result.prediction} completed with ${confidenceStr}% confidence. Category: ${classification.category}. ${classification.description}`;
+        const summary = `Local neural network analysis of ${result.prediction} completed with ${confidenceStr}% confidence. Category: ${classification.category}. ${classification.description}${preScanNote}`;
 
         const newScan: ScanRecord = {
           type: `${classification.category}: ${result.prediction}`,
@@ -263,7 +297,7 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
           }
         }
 
-        // DB write is done — navigate immediately so history sees the new row
+        // DB write is done — navigate to history
         setActiveScreen('history');
 
       } else {
@@ -309,7 +343,7 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
         console.warn("Could not convert image to base64:", imgError);
       }
 
-      const summary = `Offline diagnostic simulation of ${chosenMock.prediction} completed with ${confidenceStr}% confidence. Category: ${classification.category}. ${classification.description}`;
+      const summary = `Offline diagnostic simulation of ${chosenMock.prediction} completed with ${confidenceStr}% confidence. Category: ${classification.category}. ${classification.description}${preScanNote}`;
 
       const newScan: ScanRecord = {
         type: `${classification.category}: ${chosenMock.prediction}`,
@@ -343,7 +377,7 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
         } catch { /* skip */ }
       }
 
-      // DB write is done — navigate immediately so history sees the new row
+      // DB write is done — navigate to history
       setActiveScreen('history');
     } finally {
       setLoading(false);
@@ -417,7 +451,7 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
 
         <TouchableOpacity 
           style={[styles.primaryButton, !imageUri && styles.disabledPrimaryButton]} 
-          onPress={uploadAndScanImage}
+          onPress={handleScanPress}
           disabled={loading || !imageUri}
         >
           {loading ? (
@@ -427,6 +461,13 @@ export default function SkinScanner({ onBackPress }: SkinScannerProps) {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Pre-scan questionnaire (shown before AI runs) ── */}
+      <PreScanQuestionnaire
+        visible={showPreQuestionnaire}
+        onComplete={handlePreScanDone}
+        onSkip={() => handlePreScanDone([])}
+      />
     </SafeAreaView>
   );
 }
